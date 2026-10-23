@@ -143,7 +143,7 @@ create policy "members can manage business knowledge" on public.knowledge_source
 for all to authenticated
 using (exists (
   select 1 from public.business_members bm
-  where bm.business_id = business_id and bm.user_id = (select auth.uid())
+  where bm.business_id = knowledge_sources.business_id and bm.user_id = (select auth.uid())
 ))
 with check (exists (
   select 1 from public.business_members bm
@@ -157,11 +157,11 @@ create policy "members can manage business conversations" on public.support_conv
 for all to authenticated
 using (exists (
   select 1 from public.business_members bm
-  where bm.business_id = business_id and bm.user_id = (select auth.uid())
+  where bm.business_id = support_conversations.business_id and bm.user_id = (select auth.uid())
 ))
 with check (exists (
   select 1 from public.business_members bm
-  where bm.business_id = business_id and bm.user_id = (select auth.uid())
+  where bm.business_id = support_conversations.business_id and bm.user_id = (select auth.uid())
 ));
 
 drop policy if exists "members can manage messages for their business conversations" on public.support_messages;
