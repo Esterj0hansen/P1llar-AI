@@ -1,0 +1,17 @@
+{
+  "name": "P1llar AI",
+  "short_name": "P1llar",
+  "description": "Customer support grounded in your business knowledge.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#356df3",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
