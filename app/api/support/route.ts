@@ -8,7 +8,7 @@ function adminClient() {
   if (!supabaseUrl || !serviceKey) throw new Error("Support is not configured. Add SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables.");
   return createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
-function errorText(error: unknown) { return error instanceof Error ? error.message : "Support service error."; }
+function errorText(error: unknown) { if (error instanceof Error) return error.message; if (error && typeof error === "object" && "message" in error) return String(error.message); return "Support service error."; }
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
     return NextResponse.json({ business: { id: data.id, name: data.name, slug: data.slug, greeting: data.support_greeting, brandColor: data.brand_color } });
-  } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
+  } catch (error) { console.error("P1llar support API failed:", error); return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
 }
 
 export async function POST(request: NextRequest) {
