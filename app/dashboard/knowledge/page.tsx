@@ -2,7 +2,7 @@
 
 import "../../auth.css";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, BookOpen, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
@@ -10,7 +10,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase";
 type Business = { id: string; name: string; slug: string };
 type Source = { id: string; title: string; content: string; source_type: string; created_at: string };
 
-export default function KnowledgePage() {
+function KnowledgeContent() {
   const params = useSearchParams();
   const businessId = params.get("business") || "";
   const [business, setBusiness] = useState<Business | null>(null);
@@ -57,3 +57,5 @@ export default function KnowledgePage() {
   }
   return <main className="dashboard-page"><header className="dashboard-header"><Link href="/dashboard" className="auth-brand"><span className="brand-mark"><BookOpen size={20}/></span><span>P1llar<span className="brand-ai"> AI</span></span></Link><Link href="/dashboard" className="dashboard-signout"><ArrowLeft size={15}/> Dashboard</Link></header><section className="dashboard-content"><div className="dashboard-eyebrow">BUSINESS KNOWLEDGE</div><h1>{business?.name || "Knowledge base"}</h1><p className="dashboard-lead">Add FAQs, product details, prices, delivery information, and company policies.</p><section className="workspace-create"><h2><Plus size={19}/> Add knowledge</h2><form className="workspace-form" onSubmit={addSource}><label htmlFor="knowledge-title">Question or topic</label><input id="knowledge-title" value={title} onChange={e=>setTitle(e.target.value)} maxLength={240} placeholder="e.g. What are your delivery fees?" required/><label htmlFor="knowledge-content">Answer or details</label><textarea id="knowledge-content" value={content} onChange={e=>setContent(e.target.value)} rows={6} maxLength={12000} placeholder="Write the correct answer customers should receive..." required/><button className="button button-primary" type="submit" disabled={saving}>{saving ? <><LoaderCircle size={16} className="auth-spinner"/> Saving...</> : "Save knowledge"}</button></form></section>{error && <p className="auth-error" role="alert">{error}</p>}{notice && <p className="auth-message" role="status">{notice}</p>}<div className="workspace-list-heading"><h2>Saved knowledge ({sources.length})</h2><button className="refresh-button" onClick={()=>void load()} type="button">Refresh</button></div>{loading ? <div className="dashboard-loading"><LoaderCircle size={20} className="auth-spinner"/> Loading knowledge...</div> : sources.length===0 ? <div className="workspace-empty"><BookOpen size={25}/><h3>Your knowledge base is empty</h3><p>Add your first business question and answer above.</p></div> : <div className="workspace-grid">{sources.map(item=><article className="workspace-card" key={item.id}><div className="workspace-card-icon"><BookOpen size={18}/></div><h3>{item.title}</h3><p style={{whiteSpace:"pre-wrap"}}>{item.content}</p><button type="button" className="refresh-button" onClick={()=>void removeSource(item.id)}><Trash2 size={14}/> Delete</button></article>)}</div>}{business && <p className="dashboard-note">Business slug: <strong>{business.slug}</strong></p>}</section></main>;
 }
+
+export default function KnowledgePage() { return <Suspense fallback={<main className="dashboard-page"><p>Loading knowledge base…</p></main>}><KnowledgeContent /></Suspense>; }
