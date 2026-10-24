@@ -86,7 +86,9 @@ export default function DashboardPage() {
       setName("");
       setNotice("Your business workspace has been created.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not create the workspace.");
+      const details = caught && typeof caught === "object" && "message" in caught ? String(caught.message) : caught instanceof Error ? caught.message : String(caught ?? "Unknown error");
+      console.error("P1llar AI workspace creation failed:", caught);
+      setError(`Could not create the workspace: ${details}`);
     } finally {
       setCreating(false);
     }
