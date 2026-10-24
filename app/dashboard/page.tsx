@@ -77,8 +77,11 @@ export default function DashboardPage() {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) throw new Error("Your session has expired. Please sign in again.");
       const ownerId = authData.user.id;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const sessionUserId = sessionData.session?.user.id ?? "no-session-user";
+      const hasAccessToken = Boolean(sessionData.session?.access_token);
       const projectHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host || "missing-project-url";
-      console.info("P1llar workspace diagnostic", { ownerId, projectHost, hasSession: true });
+      console.info("P1llar workspace diagnostic", { ownerId, sessionUserId, hasAccessToken, sessionError: sessionError?.message ?? null, projectHost });
       const { data, error: insertError } = await supabase
         .from("businesses")
         .insert({ name: cleanName, slug: slug + "-" + crypto.randomUUID().slice(0, 6), owner_id: ownerId })
