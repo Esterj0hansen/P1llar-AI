@@ -32,7 +32,7 @@ function KnowledgeContent() {
       const { data, error: sourceError } = await db.from("knowledge_sources").select("id,title,content,source_type,created_at").eq("business_id", businessId).order("created_at", { ascending: false });
       if (sourceError) throw sourceError;
       setSources(data ?? []);
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not load knowledge."); }
+    } catch (e) { const detail = e && typeof e === "object" && "message" in e ? String(e.message) : e instanceof Error ? e.message : String(e ?? "Unknown error"); console.error("P1llar knowledge load failed:", e); setError(`Could not load knowledge: ${detail}`); }
     finally { setLoading(false); }
   }
   useEffect(() => { if (businessId) void load(); else { setError("Open this page from a workspace card."); setLoading(false); } }, [businessId]);
