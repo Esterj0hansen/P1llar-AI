@@ -38,8 +38,22 @@ export async function POST(request: NextRequest) {
     if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
     const context = (knowledge ?? []).map((item, i) => `[${i + 1}] ${item.title}\n${item.content}`).join("\n\n").slice(0, 24000);
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://p1llar-ai.vercel.app", "X-Title": "P1llar AI Support" }, body: JSON.stringify({ model: process.env.OPENROUTER_MODEL || "openrouter/auto", temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: `You are the customer support assistant for ${business.name}. Answer only using the business knowledge below. If the answer is not present, say you do not have that information and suggest contacting the business. Never invent prices or policies. Be concise.\n\nBUSINESS KNOWLEDGE:\n${context || "No knowledge has been added yet."}` }, { role: "user", content: question }] }) });
-    const aiData = await response.json();
-    if (!response.ok) return NextResponse.json({ error: "AI provider could not answer. Check the OpenRouter key and model settings." }, { status: 502 });
+    const aiData = await response.json().catch(() => null);
+    if (!response.ok) {
+      const providerError = aiData?.error;
+      const providerMessage = typeof providerError?.message === "string" ? providerError.message : "No error message returned";
+      const providerCode = providerError?.code ?? response.status;
+      console.error("P1llar OpenRouter request failed:", {
+        status: response.status,
+        code: providerCode,
+        message: providerMessage,
+        model: process.env.OPENROUTER_MODEL || "openrouter/auto",
+      });
+      return NextResponse.json(
+        { error: "OpenRouter request failed.", providerStatus: response.status, providerCode },
+        { status: 502 }
+      );
+    }
     const answer = aiData.choices?.[0]?.message?.content;
     if (typeof answer !== "string" || !answer.trim()) return NextResponse.json({ error: "AI provider returned an empty answer." }, { status: 502 });
     const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
