@@ -47,7 +47,9 @@ export default function DashboardPage() {
       if (listError) throw listError;
       setBusinesses(data ?? []);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load your workspace.");
+      const details = caught && typeof caught === "object" && "message" in caught ? String(caught.message) : caught instanceof Error ? caught.message : String(caught ?? "Unknown error");
+      console.error("P1llar AI workspace load failed:", caught);
+      setError(`Could not load your workspace: ${details}`);
     } finally {
       setLoading(false);
     }
