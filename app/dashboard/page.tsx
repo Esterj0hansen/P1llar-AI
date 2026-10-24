@@ -82,18 +82,16 @@ export default function DashboardPage() {
       const hasAccessToken = Boolean(sessionData.session?.access_token);
       const projectHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host || "missing-project-url";
       console.info("P1llar workspace diagnostic", { ownerId, sessionUserId, hasAccessToken, sessionError: sessionError?.message ?? null, projectHost });
-      const { data, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from("businesses")
-        .insert({ name: cleanName, slug: slug + "-" + crypto.randomUUID().slice(0, 6), owner_id: ownerId })
-        .select("id,name,slug,created_at")
-        .single();
+        .insert({ name: cleanName, slug: slug + "-" + crypto.randomUUID().slice(0, 6), owner_id: ownerId });
       if (insertError) {
-        console.error("P1llar workspace insert diagnostic", { code: insertError.code, message: insertError.message, details: insertError.details, hint: insertError.hint, ownerId, projectHost });
-        throw new Error(`${insertError.message} (code: ${insertError.code || "unknown"}; user: ${ownerId}; project: ${projectHost})`);
+        console.error("P1llar workspace insert diagnostic", { code: insertError.code, message: insertError.message, details: insertError.details, hint: insertError.hint, ownerId, sessionUserId, hasAccessToken, projectHost });
+        throw new Error(`${insertError.message} (code: ${insertError.code || "unknown"}; user: ${ownerId}; session user: ${sessionUserId}; session token present: ${hasAccessToken}; project: ${projectHost})`);
       }
-      setBusinesses(current => [data as Business, ...current]);
       setName("");
       setNotice("Your business workspace has been created.");
+      await loadBusinesses();
     } catch (caught) {
       const details = caught && typeof caught === "object" && "message" in caught ? String(caught.message) : caught instanceof Error ? caught.message : String(caught ?? "Unknown error");
       console.error("P1llar AI workspace creation failed:", caught);
