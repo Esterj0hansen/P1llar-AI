@@ -76,12 +76,18 @@ export default function DashboardPage() {
       const supabase = getSupabaseBrowserClient();
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) throw new Error("Your session has expired. Please sign in again.");
+      const ownerId = authData.user.id;
+      const projectHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").host || "missing-project-url";
+      console.info("P1llar workspace diagnostic", { ownerId, projectHost, hasSession: true });
       const { data, error: insertError } = await supabase
         .from("businesses")
-        .insert({ name: cleanName, slug: slug + "-" + crypto.randomUUID().slice(0, 6), owner_id: authData.user.id })
+        .insert({ name: cleanName, slug: slug + "-" + crypto.randomUUID().slice(0, 6), owner_id: ownerId })
         .select("id,name,slug,created_at")
         .single();
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("P1llar workspace insert diagnostic", { code: insertError.code, message: insertError.message, details: insertError.details, hint: insertError.hint, ownerId, projectHost });
+        throw new Error(`${insertError.message} (code: ${insertError.code || "unknown"}; user: ${ownerId}; project: ${projectHost})`);
+      }
       setBusinesses(current => [data as Business, ...current]);
       setName("");
       setNotice("Your business workspace has been created.");
