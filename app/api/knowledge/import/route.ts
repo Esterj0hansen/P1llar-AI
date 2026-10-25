@@ -26,6 +26,23 @@ function publicUrl(raw: string) {
 function normalize(raw: string, origin: string) {
   try { const u = publicUrl(raw); if (u.origin !== origin || SKIP_FILE.test(u.pathname)) return null; u.hash = ""; if (u.pathname !== "/") u.pathname = u.pathname.replace(/\/+$/, ""); return u.toString(); } catch { return null; }
 }
+function scriptUrlsFrom(html: string, current: string, origin: string) {
+  const found = new Set<string>();
+  for (const m of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi)) { try { const u = new URL(m[1], current); if (u.origin === origin && /\.js(?:[?#]|$)/i.test(u.href)) found.add(u.toString()); } catch {} if (found.size >= 20) break; }
+  return [...found];
+}
+async function fetchCatalogueScripts(html: string, current: string, origin: string) {
+  const blocks: string[] = [];
+  for (const src of scriptUrlsFrom(html, current, origin)) {
+    try { const r = await fetch(src, { signal: AbortSignal.timeout(5000), redirect: 'follow' }); if (!r.ok || new URL(r.url).origin !== origin) continue; const js = (await r.text()).slice(0, 2000000);
+      const m = /(?:const|let|var)\s+(products|catalogue|catalog|productList|items)\s*=\s*/i.exec(js); if (!m) continue;
+      const start = js.indexOf('[', m.index + m[0].length); if (start < 0) continue; let depth = 0, quote = '', escaped = false;
+      for (let i = start; i < js.length; i++) { const ch = js[i]; if (quote) { if (escaped) escaped = false; else if (ch === '\\') escaped = true; else if (ch === quote) quote = ''; continue; } if (ch === '"' || ch === "'") { quote = ch; continue; } if (ch === '[') depth++; else if (ch === ']') { depth--; if (!depth) { try { const data = JSON.parse(js.slice(start, i + 1)); if (Array.isArray(data)) blocks.push('Catalogue data from ' + src + ':\n' + JSON.stringify(data).slice(0, 36000)); } catch {} break; } } }
+    } catch {}
+  }
+  return blocks.join('\n\n').slice(0, 42000);
+}
+
 function linksFrom(html: string, current: string, origin: string) {
   const found = new Set<string>();
   for (const match of html.matchAll(/<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>/gi)) {
@@ -63,8 +80,9 @@ async function fetchHtml(url: string, origin: string) {
   const html = (await response.text()).slice(0, 1_200_000);
   const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, "").trim() || new URL(url).pathname || "Website page";
   const structured = structuredData(html);
+  const catalogue = await fetchCatalogueScripts(html, url, origin);
   const text = cleanHtml(html).slice(0, 12000);
-  return { title: title.slice(0, 200), content: "Source page: " + url + "\n\n" + (structured ? "EXTRACTED LISTING DATA\n" + structured + "\n\n" : "") + text, links: linksFrom(html, url, origin) };
+  return { title: title.slice(0, 200), content: "Source page: " + url + "\n\n" + (structured ? "EXTRACTED LISTING DATA\n" + structured + "\n\n" : "") + (catalogue ? "EXTRACTED CATALOGUE DATA\n" + catalogue + "\n\n" : "") + text, links: linksFrom(html, url, origin) };
 }
 
 export async function POST(request: NextRequest) {
