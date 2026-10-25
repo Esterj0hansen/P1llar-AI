@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       if (!page || page.length < pageSize) break;
     }
     // Read every visitor-provided URL for this answer only; never save it as business knowledge.
-    const urlMatches = [...question.matchAll(/https?:\\/\\/[^\\s<>\\\"']+/gi)];
+    const urlMatches = [...question.matchAll(/https?:\/\/[^\s<>"']+/gi)];
     const rawUrls = [...new Set(urlMatches.map((match) => match[0].replace(/[),.!?;]+$/, "")))].slice(0, 5);
     let livePageContext = "";
     let livePageRead = false;
@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
       }));
       livePageRead = pageResults.some((result) => result.ok);
       livePageContext = pageResults
-        .map((result) => "[VISITOR LINK " + (result.index + 1) + "]\\n" + result.content)
-        .join("\\n\\n")
+        .map((result) => "[VISITOR LINK " + (result.index + 1) + "]\n" + result.content)
+        .join("\n\n")
         .slice(0, 42000);
     }
     const key = process.env.OPENROUTER_API_KEY;
