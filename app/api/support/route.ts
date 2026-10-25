@@ -41,19 +41,28 @@ export async function POST(request: NextRequest) {
       allKnowledge.push(...(page ?? []));
       if (!page || page.length < pageSize) break;
     }
-    // Read a visitor-provided product URL for this answer only; never save it as business knowledge.
-    const urlMatch = question.match(/https?:\/\/[^\s<>\"']+/i);
+    // Read every visitor-provided URL for this answer only; never save it as business knowledge.
+    const urlMatches = [...question.matchAll(/https?:\\/\\/[^\\s<>\\\"']+/gi)];
+    const rawUrls = [...new Set(urlMatches.map((match) => match[0].replace(/[),.!?;]+$/, "")))].slice(0, 5);
     let livePageContext = "";
     let livePageRead = false;
-    if (urlMatch?.[0]) {
-      const rawUrl = urlMatch[0].replace(/[),.!?;]+$/, "");
-      try {
-        const livePage = await readPublicProductPage(rawUrl);
-        if (livePage.ok) { livePageContext = livePage.content; livePageRead = true; }
-        else livePageContext = "LIVE LINK CHECK FAILED: " + livePage.reason + " Do not guess its price; explain that the page could not be verified and ask for a screenshot or pasted product details.";
-      } catch (error) {
-        livePageContext = "LIVE LINK CHECK FAILED: " + (error instanceof Error ? error.message : "The page could not be safely accessed.") + " Do not guess its price; explain that the page could not be verified and ask for a screenshot or pasted product details.";
-      }
+    if (rawUrls.length) {
+      const pageResults = await Promise.all(rawUrls.map(async (rawUrl, index) => {
+        try {
+          const livePage = await readPublicProductPage(rawUrl);
+          if (livePage.ok) {
+            return { index, ok: true, content: livePage.content };
+          }
+          return { index, ok: false, content: "LIVE LINK CHECK FAILED for " + rawUrl + ": " + livePage.reason + ". Do not guess its price; explain that this page could not be verified." };
+        } catch (error) {
+          return { index, ok: false, content: "LIVE LINK CHECK FAILED for " + rawUrl + ": " + (error instanceof Error ? error.message : "The page could not be safely accessed.") + ". Do not guess its price." };
+        }
+      }));
+      livePageRead = pageResults.some((result) => result.ok);
+      livePageContext = pageResults
+        .map((result) => "[VISITOR LINK " + (result.index + 1) + "]\\n" + result.content)
+        .join("\\n\\n")
+        .slice(0, 42000);
     }
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
