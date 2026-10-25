@@ -32,12 +32,28 @@ export async function POST(request: NextRequest) {
     const { data: business, error: businessError } = await db.from("businesses").select("id,name").eq("slug", slug).maybeSingle();
     if (businessError) throw businessError;
     if (!business) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
-    const { data: knowledge, error: knowledgeError } = await db.from("knowledge_sources").select("title,content").eq("business_id", business.id).eq("processing_status", "ready").limit(100);
-    if (knowledgeError) throw knowledgeError;
+    const allKnowledge: Array<{ title: string | null; content: string | null }> = [];
+    const pageSize = 500;
+    for (let from = 0; from < 5000; from += pageSize) {
+      const { data: page, error: pageError } = await db.from("knowledge_sources").select("title,content").eq("business_id", business.id).eq("processing_status", "ready").range(from, from + pageSize - 1);
+      if (pageError) throw pageError;
+      allKnowledge.push(...(page ?? []));
+      if (!page || page.length < pageSize) break;
+    }
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
-    const context = (knowledge ?? []).map((item, i) => `[${i + 1}] ${item.title}\n${item.content}`).join("\n\n").slice(0, 24000);
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://p1llar-ai.vercel.app", "X-Title": "P1llar AI Support" }, body: JSON.stringify({ model: "nvidia/nemotron-3-ultra-550b-a55b:free", temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: `You are the customer support assistant for ${business.name}. Answer the visitor’s actual question in natural, helpful language using the business knowledge below. If the answer is not present, say you do not have that information and suggest contacting the business. Never invent prices or policies. Do not output safety classifications, moderation labels, JSON safety assessments, or labels such as “User Safety: safe”. Be concise.\n\nBUSINESS KNOWLEDGE:\n${context || "No knowledge has been added yet."}` }, { role: "user", content: question }] }) });
+    const terms = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+    const stopWords = new Set(["what", "whats", "how", "much", "does", "do", "is", "the", "a", "an", "for", "of", "in", "on", "please", "tell", "me", "price", "cost", "available", "have"]);
+    const usefulTerms = [...new Set(terms.filter((term) => term.length > 1 && !stopWords.has(term)))];
+    const rankedKnowledge = allKnowledge.map((item) => {
+      const title = item.title ?? "";
+      const content = item.content ?? "";
+      const score = usefulTerms.reduce((total, term) => total + (title.toLowerCase().includes(term) ? 8 : 0) + (content.toLowerCase().includes(term) ? 2 : 0), 0);
+      return { ...item, score };
+    }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score);
+    const selectedKnowledge = rankedKnowledge.length ? rankedKnowledge.slice(0, 30) : allKnowledge.slice(0, 10);
+    const context = selectedKnowledge.map((item, i) => `[${i + 1}] SOURCE: ${item.title ?? "Business information"}\n${item.content ?? ""}`).join("\n\n").slice(0, 48000);
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://p1llar-ai.vercel.app", "X-Title": "P1llar AI Support" }, body: JSON.stringify({ model: "nvidia/nemotron-3-ultra-550b-a55b:free", temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: `You are the customer support assistant for ${business.name}. Answer the visitor’s actual question using the most relevant matching source, especially exact product listings. For price questions, check the supplied knowledge for the product name, size, price, and currency before deciding the price is missing. If a price is present, state it clearly. If it truly is absent, say so and do not invent one. Never invent prices or policies. Do not output safety classifications, moderation labels, JSON safety assessments, or labels such as “User Safety: safe”. Be concise.\n\nBUSINESS KNOWLEDGE:\n${context || "No knowledge has been added yet."}` }, { role: "user", content: question }] }) });
     const aiData = await response.json().catch(() => null);
     if (!response.ok) {
       const providerError = aiData?.error;
@@ -47,7 +63,7 @@ export async function POST(request: NextRequest) {
         status: response.status,
         code: providerCode,
         message: providerMessage,
-        model: "openrouter/free",
+        model: "nvidia/nemotron-3-ultra-550b-a55b:free",
       });
       return NextResponse.json(
         { error: "OpenRouter request failed: " + providerMessage, providerStatus: response.status, providerCode },
@@ -62,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
     const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
     if (conversationError) throw conversationError;
-    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: (knowledge ?? []).length > 0 }]);
+    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: allKnowledge.length > 0 }]);
     if (messageError) throw messageError;
     return NextResponse.json({ answer: answer.trim() });
   } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
