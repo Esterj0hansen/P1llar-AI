@@ -23,6 +23,22 @@ function publicUrl(raw: string) {
   if (["localhost", "127.0.0.1", "::1"].includes(host) || host.endsWith(".local") || /^\d+\.\d+\.\d+\.\d+$/.test(host)) throw new Error("Enter a public website domain.");
   url.hash = ""; return url;
 }
+function pagePriority(raw: string) {
+  try {
+    const path = new URL(raw).pathname.toLowerCase().replace(/[-_]+/g, " ");
+    if (/pricing|price|plans?|subscriptions?|membership|fees|rates|cost/.test(path)) return 0;
+    if (/products?|catalog|catalogue|shop|store|services?|menu|offers?|packages?/.test(path)) return 1;
+    if (/faq|help|support|delivery|shipping|returns?|refund|payment|checkout/.test(path)) return 2;
+    if (/about|contact|business/.test(path)) return 3;
+    if (/privacy|terms|login|sign in|signup|register|account/.test(path)) return 5;
+    return 4;
+  } catch { return 4; }
+}
+function prioritize(queue: string[]) {
+  return queue.map((url, index) => ({ url, index, priority: pagePriority(url) }))
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .map(item => item.url);
+}
 function normalize(raw: string, origin: string) {
   try { const u = publicUrl(raw); if (u.origin !== origin || SKIP_FILE.test(u.pathname)) return null; u.hash = ""; if (u.pathname !== "/") u.pathname = u.pathname.replace(/\/+$/, ""); return u.toString(); } catch { return null; }
 }
@@ -118,7 +134,7 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch { /* Sitemap is optional. */ }
-      if (!queue.includes(start.toString())) queue.unshift(start.toString());
+      if (!queue.includes(start.toString())) queue.unshift(start.toString());\n      queue.splice(0, queue.length, ...prioritize(queue));
     }
     const collected: { title: string; content: string }[] = [];
     let attempted = 0;
@@ -130,7 +146,7 @@ export async function POST(request: NextRequest) {
         const page = await fetchHtml(current, origin);
         if (!page) continue;
         if (page.content.length > 100) collected.push({ title: page.title, content: page.content });
-        for (const link of page.links) if (!visited.has(link) && !queue.includes(link) && queue.length < MAX_QUEUE) queue.push(link);
+        for (const link of page.links) if (!visited.has(link) && !queue.includes(link) && queue.length < MAX_QUEUE) queue.push(link);\n        queue.splice(0, queue.length, ...prioritize(queue));
       } catch { /* Skip unavailable pages. */ }
     }
     if (collected.length) {
