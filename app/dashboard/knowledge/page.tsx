@@ -21,6 +21,7 @@ function KnowledgeContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -40,7 +41,7 @@ function KnowledgeContent() {
   useEffect(() => { if (businessId) void load(); else { setError("Open this page from a workspace card."); setLoading(false); } }, [businessId]);
 
   async function importWebsite(event: FormEvent) {
-    event.preventDefault(); setError(""); setNotice("");
+    event.preventDefault(); setError(""); setNotice(""); setImportProgress("");
     const cleanUrl = websiteUrl.trim();
     if (!cleanUrl) { setError("Enter your business website URL."); return; }
     setImporting(true);
@@ -50,18 +51,36 @@ function KnowledgeContent() {
       if (sessionError) throw sessionError;
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Please sign in again.");
-      const response = await fetch("/api/knowledge/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ businessId, url: /^https?:\/\//i.test(cleanUrl) ? cleanUrl : "https://" + cleanUrl })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Website import failed.");
-      setNotice(result.message || "Website information imported.");
+      const url = /^https?:\/\//i.test(cleanUrl) ? cleanUrl : "https://" + cleanUrl;
+      let queue: string[] | undefined;
+      let visited: string[] | undefined;
+      let totalImported = 0;
+      let pagesVisited = 0;
+      let done = false;
+      let batches = 0;
+      while (!done && batches < 120) {
+        const response = await fetch("/api/knowledge/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ businessId, url, ...(queue && visited ? { queue, visited } : {}) })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Website import failed.");
+        queue = Array.isArray(result.queue) ? result.queue : [];
+        visited = Array.isArray(result.visited) ? result.visited : [];
+        totalImported += Number(result.pagesImportedThisBatch || 0);
+        pagesVisited = Number(result.pagesVisited || pagesVisited);
+        done = Boolean(result.done);
+        batches++;
+        setImportProgress(`Scanned ${pagesVisited} pages · saved ${totalImported} new pages${done ? "" : " · continuing…"}`);
+        if (!done) await new Promise(resolve => setTimeout(resolve, 150));
+      }
+      if (!done) throw new Error("The scan paused after many batches. Import again to continue scanning the remaining pages.");
+      setNotice(`Website scan complete. Scanned ${pagesVisited} pages and saved ${totalImported} new pages.`);
       setWebsiteUrl("");
       await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Could not import this website."); }
-    finally { setImporting(false); }
+    finally { setImporting(false); setImportProgress(""); }
   }
 
   async function addSource(event: FormEvent) {
@@ -93,8 +112,9 @@ function KnowledgeContent() {
         <form className="workspace-form" onSubmit={importWebsite}>
           <label htmlFor="website-url">Business website URL</label>
           <input id="website-url" type="url" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} placeholder="https://yourbusiness.com" required />
-          <p className="dashboard-note">We’ll try to read up to 10 public pages on this website and save their text for your support assistant. Some websites block automatic importing; private pages and files are not imported yet.</p>
-          <button className="button button-primary" type="submit" disabled={importing || !businessId}>{importing ? <><LoaderCircle size={16} className="auth-spinner"/> Reading website...</> : <>Import website information <Globe size={16}/></>}</button>
+          <p className="dashboard-note">We scan public pages in small batches, check the sitemap when available, and can import up to 500 pages per scan. Large sites can take time. JavaScript-only pages, private content and files may not be readable.</p>
+          <button className="button button-primary" type="submit" disabled={importing || !businessId}>{importing ? <><LoaderCircle size={16} className="auth-spinner"/> Scanning website...</> : <>Import website information <Globe size={16}/></>}</button>
+          {importing && <p className="dashboard-note" role="status">{importProgress || "Starting website scan…"}</p>}
         </form>
       </section>
       <section className="workspace-create">
