@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
     if (/user\s*safety\s*:\s*(safe|unsafe)|response\s*safety\s*:/i.test(answer.trim())) {
       console.error("P1llar support model returned a safety-classification response instead of an answer.");
       return NextResponse.json({ error: "The support assistant returned an invalid response. Please try again." }, { status: 502 });
-    }\n    const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
+    }
+    const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
     if (conversationError) throw conversationError;
     const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: (knowledge ?? []).length > 0 }]);
     if (messageError) throw messageError;
