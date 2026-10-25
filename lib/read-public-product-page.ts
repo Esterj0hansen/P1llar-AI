@@ -47,13 +47,13 @@ function stripHtml(s: string) {
 }
 function meta(html: string, names: string[]) {
   for (const name of names) {
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp('<meta\\b(?=[^>]*(?:name|property)=[\\"\\']' + escaped + '[\\"\\'])[^>]*content=[\\"\\']([^\\"\\']*)[\\"\\'][^>]*>', "i");
-    const match = html.match(re);
-    if (match?.[1]) return decode(match[1]).trim();
-    const reverse = new RegExp('<meta\\b(?=[^>]*content=[\\"\\']([^\\"\\']*)[\\"\\'])[^>]*(?:name|property)=[\\"\\']' + escaped + '[\\"\\'][^>]*>', "i");
-    const m2 = html.match(reverse);
-    if (m2?.[1]) return decode(m2[1]).trim();
+    const tagPattern = /<meta\\b[^>]*>/gi;
+    for (const tag of html.match(tagPattern) || []) {
+      const key = tag.match(/\\b(?:name|property)\\s*=\\s*["']([^"']+)["']/i)?.[1];
+      if (key?.toLowerCase() !== name.toLowerCase()) continue;
+      const value = tag.match(/\\bcontent\\s*=\\s*["']([^"']*)["']/i)?.[1];
+      if (value) return decode(value).trim();
+    }
   }
   return "";
 }
