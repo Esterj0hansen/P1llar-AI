@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
     const context = (knowledge ?? []).map((item, i) => `[${i + 1}] ${item.title}\n${item.content}`).join("\n\n").slice(0, 24000);
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://p1llar-ai.vercel.app", "X-Title": "P1llar AI Support" }, body: JSON.stringify({ model: process.env.OPENROUTER_MODEL || "openrouter/auto", temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: `You are the customer support assistant for ${business.name}. Answer only using the business knowledge below. If the answer is not present, say you do not have that information and suggest contacting the business. Never invent prices or policies. Be concise.\n\nBUSINESS KNOWLEDGE:\n${context || "No knowledge has been added yet."}` }, { role: "user", content: question }] }) });
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL || "https://p1llar-ai.vercel.app", "X-Title": "P1llar AI Support" }, body: JSON.stringify({ model: "openrouter/free", temperature: 0.2, max_tokens: 600, messages: [{ role: "system", content: `You are the customer support assistant for ${business.name}. Answer only using the business knowledge below. If the answer is not present, say you do not have that information and suggest contacting the business. Never invent prices or policies. Be concise.\n\nBUSINESS KNOWLEDGE:\n${context || "No knowledge has been added yet."}` }, { role: "user", content: question }] }) });
     const aiData = await response.json().catch(() => null);
     if (!response.ok) {
       const providerError = aiData?.error;
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         status: response.status,
         code: providerCode,
         message: providerMessage,
-        model: process.env.OPENROUTER_MODEL || "openrouter/auto",
+        model: "openrouter/free",
       });
       return NextResponse.json(
         { error: "OpenRouter request failed: " + providerMessage, providerStatus: response.status, providerCode },
