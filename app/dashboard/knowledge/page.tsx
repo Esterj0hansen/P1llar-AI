@@ -57,8 +57,7 @@ function KnowledgeContent() {
       let totalImported = 0;
       let pagesVisited = 0;
       let done = false;
-      let batches = 0;
-      while (!done && batches < 120) {
+      while (!done) {
         const response = await fetch("/api/knowledge/import", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -71,11 +70,9 @@ function KnowledgeContent() {
         totalImported += Number(result.pagesImportedThisBatch || 0);
         pagesVisited = Number(result.pagesVisited || pagesVisited);
         done = Boolean(result.done);
-        batches++;
         setImportProgress(`Scanned ${pagesVisited} pages · saved ${totalImported} new pages${done ? "" : " · continuing…"}`);
         if (!done) await new Promise(resolve => setTimeout(resolve, 150));
       }
-      if (!done) throw new Error("The scan paused after many batches. Import again to continue scanning the remaining pages.");
       setNotice(`Website scan complete. Scanned ${pagesVisited} pages and saved ${totalImported} new pages.`);
       setWebsiteUrl("");
       await load();
@@ -112,7 +109,7 @@ function KnowledgeContent() {
         <form className="workspace-form" onSubmit={importWebsite}>
           <label htmlFor="website-url">Business website URL</label>
           <input id="website-url" type="url" value={websiteUrl} onChange={e=>setWebsiteUrl(e.target.value)} placeholder="https://yourbusiness.com" required />
-          <p className="dashboard-note">We scan public pages in small batches, check the sitemap when available, and can import up to 500 pages per scan. Large sites can take time. JavaScript-only pages, private content and files may not be readable.</p>
+          <p className="dashboard-note">We scan public pages in small batches and check the sitemap when available. There is no fixed total-page ceiling in the crawler; large websites may take time. JavaScript-only pages, private content and files may not be readable.</p>
           <button className="button button-primary" type="submit" disabled={importing || !businessId}>{importing ? <><LoaderCircle size={16} className="auth-spinner"/> Scanning website...</> : <>Import website information <Globe size={16}/></>}</button>
           {importing && <p className="dashboard-note" role="status">{importProgress || "Starting website scan…"}</p>}
         </form>
