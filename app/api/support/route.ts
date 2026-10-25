@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (typeof answer !== "string" || !answer.trim()) return NextResponse.json({ error: "AI provider returned an empty answer." }, { status: 502 });
     const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
     if (conversationError) throw conversationError;
-    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: (knowledge ?? []).length > 0 }]);
+    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: (knowledge ?? []).length > 0 }]);
     if (messageError) throw messageError;
     return NextResponse.json({ answer: answer.trim() });
   } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
