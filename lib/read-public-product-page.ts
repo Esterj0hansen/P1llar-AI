@@ -47,11 +47,11 @@ function stripHtml(s: string) {
 }
 function meta(html: string, names: string[]) {
   for (const name of names) {
-    const tagPattern = /<meta\\b[^>]*>/gi;
+    const tagPattern = /<meta\b[^>]*>/gi;
     for (const tag of html.match(tagPattern) || []) {
-      const key = tag.match(/\\b(?:name|property)\\s*=\\s*["']([^"']+)["']/i)?.[1];
+      const key = tag.match(/\b(?:name|property)\s*=\s*["']([^"']+)["']/i)?.[1];
       if (key?.toLowerCase() !== name.toLowerCase()) continue;
-      const value = tag.match(/\\bcontent\\s*=\\s*["']([^"']*)["']/i)?.[1];
+      const value = tag.match(/\bcontent\s*=\s*["']([^"']*)["']/i)?.[1];
       if (value) return decode(value).trim();
     }
   }
