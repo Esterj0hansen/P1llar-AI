@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
-    const terms = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+    const terms: string[] = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
     const stopWords = new Set(["what", "whats", "how", "much", "does", "do", "is", "the", "a", "an", "for", "of", "in", "on", "please", "tell", "me", "price", "cost", "available", "have"]);
     const usefulTerms = [...new Set(terms.filter((term) => term.length > 1 && !stopWords.has(term)))];
     const rankedKnowledge = allKnowledge.map((item) => {
