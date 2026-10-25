@@ -134,7 +134,8 @@ export async function POST(request: NextRequest) {
           }
         }
       } catch { /* Sitemap is optional. */ }
-      if (!queue.includes(start.toString())) queue.unshift(start.toString());\n      queue.splice(0, queue.length, ...prioritize(queue));
+      if (!queue.includes(start.toString())) queue.unshift(start.toString());
+      queue.splice(0, queue.length, ...prioritize(queue));
     }
     const collected: { title: string; content: string }[] = [];
     let attempted = 0;
