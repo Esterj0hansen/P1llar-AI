@@ -134,10 +134,17 @@ export async function POST(request: NextRequest) {
       } catch { /* Skip unavailable pages. */ }
     }
     if (collected.length) {
-      const { data: existing } = await db.from("knowledge_sources").select("content").eq("business_id", businessId).eq("source_type", "website");
-      const existingUrls = new Set((existing || []).map((row: {content:string}) => row.content.match(/^Source page: (.+)\n/)?.[1]).filter(Boolean));
-      const rows = collected.filter(page => { const url = page.content.match(/^Source page: (.+)\n/)?.[1]; return url && !existingUrls.has(url); })
-        .map(page => ({ business_id: businessId, title: page.title, content: page.content, source_type: "website", processing_status: "ready" }));
+      const { data: existing, error: existingError } = await db.from("knowledge_sources").select("id,content").eq("business_id", businessId).eq("source_type", "website");
+      if (existingError) throw existingError;
+      const byUrl = new Map<string, string>();
+      for (const row of existing || []) { const url = (row.content || "").match(/^Source page: (.+)\n/)?.[1]; if (url && row.id) byUrl.set(url, row.id); }
+      const rows: Array<{business_id:string;title:string;content:string;source_type:string;processing_status:string}> = [];
+      for (const page of collected) {
+        const url = page.content.match(/^Source page: (.+)\n/)?.[1]; if (!url) continue;
+        const id = byUrl.get(url);
+        if (id) { const { error: updateError } = await db.from("knowledge_sources").update({ title: page.title, content: page.content, processing_status: "ready" }).eq("id", id).eq("business_id", businessId); if (updateError) throw updateError; }
+        else rows.push({ business_id: businessId, title: page.title, content: page.content, source_type: "website", processing_status: "ready" });
+      }
       if (rows.length) { const { error: insertError } = await db.from("knowledge_sources").insert(rows); if (insertError) throw insertError; }
     }
     const remaining = queue.filter(url => !visited.has(url));
