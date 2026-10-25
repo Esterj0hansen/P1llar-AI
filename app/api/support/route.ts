@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
         model: process.env.OPENROUTER_MODEL || "openrouter/auto",
       });
       return NextResponse.json(
-        { error: "OpenRouter request failed.", providerStatus: response.status, providerCode },
+        { error: "OpenRouter request failed: " + providerMessage, providerStatus: response.status, providerCode },
         { status: 502 }
       );
     }
