@@ -147,7 +147,8 @@ export async function POST(request: NextRequest) {
         const page = await fetchHtml(current, origin);
         if (!page) continue;
         if (page.content.length > 100) collected.push({ title: page.title, content: page.content });
-        for (const link of page.links) if (!visited.has(link) && !queue.includes(link) && queue.length < MAX_QUEUE) queue.push(link);\n        queue.splice(0, queue.length, ...prioritize(queue));
+        for (const link of page.links) if (!visited.has(link) && !queue.includes(link) && queue.length < MAX_QUEUE) queue.push(link);
+        queue.splice(0, queue.length, ...prioritize(queue));
       } catch { /* Skip unavailable pages. */ }
     }
     if (collected.length) {
