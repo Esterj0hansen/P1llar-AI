@@ -11,25 +11,32 @@ function adminClient() {
   return createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 function errorText(error: unknown) { if (error instanceof Error) return error.message; if (error && typeof error === "object" && "message" in error) return String(error.message); return "Support service error."; }
+const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Max-Age": "86400" };
+function supportJson(data: unknown, init?: ResponseInit) {
+  const response = NextResponse.json(data, init);
+  for (const [key, value] of Object.entries(corsHeaders)) response.headers.set(key, value);
+  return response;
+}
+export function OPTIONS() { return new Response(null, { status: 204, headers: corsHeaders }); }
 
 export async function GET(request: NextRequest) {
   try {
     const slug = request.nextUrl.searchParams.get("slug")?.trim();
-    if (!slug) return NextResponse.json({ error: "Missing business slug." }, { status: 400 });
+    if (!slug) return supportJson({ error: "Missing business slug." }, { status: 400 });
     const db = adminClient();
     const { data, error } = await db.from("businesses").select("id,name,slug,support_greeting,brand_color").eq("slug", slug).maybeSingle();
     if (error) throw error;
-    if (!data) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
+    if (!data) return supportJson({ error: "This support page does not exist." }, { status: 404 });
     const conversationId = request.nextUrl.searchParams.get("conversationId");
     if (conversationId) {
       const { data: conversation } = await db.from("support_conversations").select("id").eq("id", conversationId).eq("business_id", data.id).maybeSingle();
-      if (!conversation) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+      if (!conversation) return supportJson({ error: "Conversation not found." }, { status: 404 });
       const { data: staffMessages, error: messagesError } = await db.from("support_messages").select("id,sender_type,content,created_at").eq("conversation_id", conversationId).eq("sender_type", "staff").order("created_at", { ascending: true });
       if (messagesError) throw messagesError;
-      return NextResponse.json({ messages: staffMessages ?? [] });
+      return supportJson({ messages: staffMessages ?? [] });
     }
-    return NextResponse.json({ business: { id: data.id, name: data.name, slug: data.slug, greeting: data.support_greeting, brandColor: data.brand_color } });
-  } catch (error) { console.error("P1llar support API failed:", error); return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
+    return supportJson({ business: { id: data.id, name: data.name, slug: data.slug, greeting: data.support_greeting, brandColor: data.brand_color } });
+  } catch (error) { console.error("P1llar support API failed:", error); return supportJson({ error: errorText(error) }, { status: 503 }); }
 }
 
 export async function POST(request: NextRequest) {
@@ -38,25 +45,25 @@ export async function POST(request: NextRequest) {
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
     const question = typeof body.question === "string" ? body.question.trim().slice(0, 2000) : "";
     const suppliedConversationId = typeof body.conversationId === "string" ? body.conversationId : "";
-    if (!slug || !question) return NextResponse.json({ error: "Enter a question." }, { status: 400 });
-    if (question.length > 2000) return NextResponse.json({ error: "Your message is too long." }, { status: 413 });
+    if (!slug || !question) return supportJson({ error: "Enter a question." }, { status: 400 });
+    if (question.length > 2000) return supportJson({ error: "Your message is too long." }, { status: 413 });
     const db = adminClient();
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const rateKey = createHash("sha256").update(slug + ":" + ip).digest("hex");
     const { data: allowed, error: rateError } = await db.rpc("consume_support_rate_limit", { p_rate_key: rateKey, p_limit: 12, p_window_seconds: 60 });
     if (rateError) {
       console.error("P1llar rate limit migration missing or unavailable:", rateError.message);
-      return NextResponse.json({ error: "Support is temporarily unavailable. Please try again shortly." }, { status: 503 });
+      return supportJson({ error: "Support is temporarily unavailable. Please try again shortly." }, { status: 503 });
     }
-    if (!allowed) return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
+    if (!allowed) return supportJson({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
     const { data: business, error: businessError } = await db.from("businesses").select("id,name").eq("slug", slug).maybeSingle();
     if (businessError) throw businessError;
-    if (!business) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
+    if (!business) return supportJson({ error: "This support page does not exist." }, { status: 404 });
     if (/\\b(human|real person|live agent|talk to someone|speak to someone|representative)\\b/i.test(question)) {
       let handoffId = suppliedConversationId;
       if (handoffId) {
         const { data: existing } = await db.from("support_conversations").select("id").eq("id", handoffId).eq("business_id", business.id).maybeSingle();
-        if (!existing) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+        if (!existing) return supportJson({ error: "Conversation not found." }, { status: 404 });
         await db.from("support_conversations").update({ status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).eq("id", handoffId);
       } else {
         const { data: created, error: handoffError } = await db.from("support_conversations").insert({ business_id: business.id, status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).select("id").single();
@@ -65,7 +72,7 @@ export async function POST(request: NextRequest) {
       }
       await db.from("support_messages").insert({ conversation_id: handoffId, sender_type: "visitor", content: question, grounded: false });
       await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { handoff: true } });
-      return NextResponse.json({ answer: "I've flagged this conversation for a human support representative. The business team will follow up as soon as possible.", handoff: true, conversationId: handoffId });
+      return supportJson({ answer: "I've flagged this conversation for a human support representative. The business team will follow up as soon as possible.", handoff: true, conversationId: handoffId });
     }
     const allKnowledge: Array<{ title: string | null; content: string | null }> = [];
     const pageSize = 500;
@@ -99,7 +106,7 @@ export async function POST(request: NextRequest) {
         .slice(0, 42000);
     }
     const key = process.env.OPENROUTER_API_KEY;
-    if (!key) return NextResponse.json({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
+    if (!key) return supportJson({ error: "AI answers are not enabled yet. Add OPENROUTER_API_KEY in Vercel." }, { status: 503 });
     const terms: string[] = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
     const stopWords = new Set(["what", "whats", "how", "much", "does", "do", "is", "the", "a", "an", "for", "of", "in", "on", "please", "tell", "me", "price", "cost", "available", "have"]);
     const usefulTerms = [...new Set(terms.filter((term) => term.length > 1 && !stopWords.has(term)))];
@@ -124,22 +131,22 @@ export async function POST(request: NextRequest) {
         message: providerMessage,
         model: "nvidia/nemotron-3-ultra-550b-a55b:free",
       });
-      return NextResponse.json(
+      return supportJson(
         { error: "OpenRouter request failed: " + providerMessage, providerStatus: response.status, providerCode },
         { status: 502 }
       );
     }
     const answer = aiData.choices?.[0]?.message?.content;
-    if (typeof answer !== "string" || !answer.trim()) return NextResponse.json({ error: "AI provider returned an empty answer." }, { status: 502 });
+    if (typeof answer !== "string" || !answer.trim()) return supportJson({ error: "AI provider returned an empty answer." }, { status: 502 });
     if (/user\s*safety\s*:\s*(safe|unsafe)|response\s*safety\s*:/i.test(answer.trim())) {
       console.error("P1llar support model returned a safety-classification response instead of an answer.");
-      return NextResponse.json({ error: "The support assistant returned an invalid response. Please try again." }, { status: 502 });
+      return supportJson({ error: "The support assistant returned an invalid response. Please try again." }, { status: 502 });
     }
     let conversationId = suppliedConversationId;
     if (conversationId) {
       const { data: existing, error: existingError } = await db.from("support_conversations").select("id").eq("id", conversationId).eq("business_id", business.id).maybeSingle();
       if (existingError) throw existingError;
-      if (!existing) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+      if (!existing) return supportJson({ error: "Conversation not found." }, { status: 404 });
     } else {
       const { data: created, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
       if (conversationError) throw conversationError;
@@ -148,6 +155,6 @@ export async function POST(request: NextRequest) {
     const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversationId, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversationId, sender_type: "assistant", content: answer.trim(), grounded: allKnowledge.length > 0 || livePageRead }]);
     if (messageError) throw messageError;
     await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { grounded: allKnowledge.length > 0 || livePageRead } });
-    return NextResponse.json({ answer: answer.trim(), conversationId });
-  } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
+    return supportJson({ answer: answer.trim(), conversationId });
+  } catch (error) { return supportJson({ error: errorText(error) }, { status: 503 }); }
 }
