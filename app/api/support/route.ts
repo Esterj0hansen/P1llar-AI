@@ -20,6 +20,14 @@ export async function GET(request: NextRequest) {
     const { data, error } = await db.from("businesses").select("id,name,slug,support_greeting,brand_color").eq("slug", slug).maybeSingle();
     if (error) throw error;
     if (!data) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
+    const conversationId = request.nextUrl.searchParams.get("conversationId");
+    if (conversationId) {
+      const { data: conversation } = await db.from("support_conversations").select("id").eq("id", conversationId).eq("business_id", data.id).maybeSingle();
+      if (!conversation) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+      const { data: staffMessages, error: messagesError } = await db.from("support_messages").select("id,sender_type,content,created_at").eq("conversation_id", conversationId).eq("sender_type", "staff").order("created_at", { ascending: true });
+      if (messagesError) throw messagesError;
+      return NextResponse.json({ messages: staffMessages ?? [] });
+    }
     return NextResponse.json({ business: { id: data.id, name: data.name, slug: data.slug, greeting: data.support_greeting, brandColor: data.brand_color } });
   } catch (error) { console.error("P1llar support API failed:", error); return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
 }
@@ -29,6 +37,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
     const question = typeof body.question === "string" ? body.question.trim().slice(0, 2000) : "";
+    const suppliedConversationId = typeof body.conversationId === "string" ? body.conversationId : "";
     if (!slug || !question) return NextResponse.json({ error: "Enter a question." }, { status: 400 });
     if (question.length > 2000) return NextResponse.json({ error: "Your message is too long." }, { status: 413 });
     const db = adminClient();
@@ -44,11 +53,19 @@ export async function POST(request: NextRequest) {
     if (businessError) throw businessError;
     if (!business) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
     if (/\\b(human|real person|live agent|talk to someone|speak to someone|representative)\\b/i.test(question)) {
-      const { data: handoffConversation, error: handoffError } = await db.from("support_conversations").insert({ business_id: business.id, status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).select("id").single();
-      if (handoffError) throw handoffError;
-      await db.from("support_messages").insert({ conversation_id: handoffConversation.id, sender_type: "visitor", content: question, grounded: false });
+      let handoffId = suppliedConversationId;
+      if (handoffId) {
+        const { data: existing } = await db.from("support_conversations").select("id").eq("id", handoffId).eq("business_id", business.id).maybeSingle();
+        if (!existing) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+        await db.from("support_conversations").update({ status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).eq("id", handoffId);
+      } else {
+        const { data: created, error: handoffError } = await db.from("support_conversations").insert({ business_id: business.id, status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).select("id").single();
+        if (handoffError) throw handoffError;
+        handoffId = created.id;
+      }
+      await db.from("support_messages").insert({ conversation_id: handoffId, sender_type: "visitor", content: question, grounded: false });
       await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { handoff: true } });
-      return NextResponse.json({ answer: "I've flagged this conversation for a human support representative. The business team will follow up as soon as possible.", handoff: true });
+      return NextResponse.json({ answer: "I've flagged this conversation for a human support representative. The business team will follow up as soon as possible.", handoff: true, conversationId: handoffId });
     }
     const allKnowledge: Array<{ title: string | null; content: string | null }> = [];
     const pageSize = 500;
@@ -118,11 +135,19 @@ export async function POST(request: NextRequest) {
       console.error("P1llar support model returned a safety-classification response instead of an answer.");
       return NextResponse.json({ error: "The support assistant returned an invalid response. Please try again." }, { status: 502 });
     }
-    const { data: conversation, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
-    if (conversationError) throw conversationError;
-    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: allKnowledge.length > 0 || livePageRead }]);
+    let conversationId = suppliedConversationId;
+    if (conversationId) {
+      const { data: existing, error: existingError } = await db.from("support_conversations").select("id").eq("id", conversationId).eq("business_id", business.id).maybeSingle();
+      if (existingError) throw existingError;
+      if (!existing) return NextResponse.json({ error: "Conversation not found." }, { status: 404 });
+    } else {
+      const { data: created, error: conversationError } = await db.from("support_conversations").insert({ business_id: business.id, status: "open" }).select("id").single();
+      if (conversationError) throw conversationError;
+      conversationId = created.id;
+    }
+    const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversationId, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversationId, sender_type: "assistant", content: answer.trim(), grounded: allKnowledge.length > 0 || livePageRead }]);
     if (messageError) throw messageError;
     await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { grounded: allKnowledge.length > 0 || livePageRead } });
-    return NextResponse.json({ answer: answer.trim() });
+    return NextResponse.json({ answer: answer.trim(), conversationId });
   } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
 }
