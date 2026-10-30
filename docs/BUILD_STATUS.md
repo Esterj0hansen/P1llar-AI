@@ -5,7 +5,7 @@ Last reviewed: 30 October 2026
 ## Implemented in the repository
 - Supabase email/password authentication and business workspaces.
 - Manual business knowledge and resumable same-origin website import.
-- Authenticated private file upload route and dashboard control. TXT/Markdown/CSV are indexed; PDF/DOCX are stored privately but are not yet text-extracted.
+- Authenticated private file upload route and dashboard control. TXT/Markdown/CSV/PDF/DOCX extraction is implemented; scanned image-only PDFs may not yield searchable text.
 - Hosted support page and embeddable widget at `/p1llar-widget.js`.
 - OpenRouter grounded support answers.
 - Conversation inbox, handoff request capture, staff replies and resolve action.
@@ -35,7 +35,7 @@ Create the recurring plans in Paystack and use the exact plan codes in Vercel. C
 - Run and pass GitHub Actions test, TypeScript and production build checks.
 - Apply the Supabase launch migration and verify storage bucket/RPC permissions.
 - Complete live end-to-end tests with a real Supabase account, actual uploaded file, rate-limit threshold, handoff/staff reply, and Paystack test transaction + webhook.
-- Add PDF/DOCX extraction (currently stored, not searchable).
+- Test PDF/DOCX extraction with representative documents; scanned PDFs may need OCR.
 - Add CAPTCHA/bot controls, operational monitoring and a documented retention/deletion workflow.
 - Test widget on third-party domains and validate browser/CORS behaviour.
 
