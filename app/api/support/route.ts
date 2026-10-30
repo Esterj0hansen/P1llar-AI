@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { readPublicProductPage } from "@/lib/read-public-product-page";
 
@@ -29,10 +30,26 @@ export async function POST(request: NextRequest) {
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
     const question = typeof body.question === "string" ? body.question.trim().slice(0, 2000) : "";
     if (!slug || !question) return NextResponse.json({ error: "Enter a question." }, { status: 400 });
+    if (question.length > 2000) return NextResponse.json({ error: "Your message is too long." }, { status: 413 });
     const db = adminClient();
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const rateKey = createHash("sha256").update(slug + ":" + ip).digest("hex");
+    const { data: allowed, error: rateError } = await db.rpc("consume_support_rate_limit", { p_rate_key: rateKey, p_limit: 12, p_window_seconds: 60 });
+    if (rateError) {
+      console.error("P1llar rate limit migration missing or unavailable:", rateError.message);
+      return NextResponse.json({ error: "Support is temporarily unavailable. Please try again shortly." }, { status: 503 });
+    }
+    if (!allowed) return NextResponse.json({ error: "Too many messages. Please wait a minute and try again." }, { status: 429 });
     const { data: business, error: businessError } = await db.from("businesses").select("id,name").eq("slug", slug).maybeSingle();
     if (businessError) throw businessError;
     if (!business) return NextResponse.json({ error: "This support page does not exist." }, { status: 404 });
+    if (/\\b(human|real person|live agent|talk to someone|speak to someone|representative)\\b/i.test(question)) {
+      const { data: handoffConversation, error: handoffError } = await db.from("support_conversations").insert({ business_id: business.id, status: "needs_human", handoff_requested_at: new Date().toISOString(), handoff_note: question }).select("id").single();
+      if (handoffError) throw handoffError;
+      await db.from("support_messages").insert({ conversation_id: handoffConversation.id, sender_type: "visitor", content: question, grounded: false });
+      await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { handoff: true } });
+      return NextResponse.json({ answer: "I've flagged this conversation for a human support representative. The business team will follow up as soon as possible.", handoff: true });
+    }
     const allKnowledge: Array<{ title: string | null; content: string | null }> = [];
     const pageSize = 500;
     for (let from = 0; from < 5000; from += pageSize) {
@@ -105,6 +122,7 @@ export async function POST(request: NextRequest) {
     if (conversationError) throw conversationError;
     const { error: messageError } = await db.from("support_messages").insert([{ conversation_id: conversation.id, sender_type: "visitor", content: question, grounded: false }, { conversation_id: conversation.id, sender_type: "assistant", content: answer.trim(), grounded: allKnowledge.length > 0 || livePageRead }]);
     if (messageError) throw messageError;
+    await db.from("usage_events").insert({ business_id: business.id, event_type: "support_message", quantity: 1, metadata: { grounded: allKnowledge.length > 0 || livePageRead } });
     return NextResponse.json({ answer: answer.trim() });
   } catch (error) { return NextResponse.json({ error: errorText(error) }, { status: 503 }); }
 }
