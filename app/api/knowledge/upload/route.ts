@@ -18,8 +18,18 @@ export async function POST(request:NextRequest){
   const db=createClient(url,service,{auth:{persistSession:false}});
   const name=file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(0,120),path=businessId+"/"+crypto.randomUUID()+"-"+name,bytes=new Uint8Array(await file.arrayBuffer());
   const {error:storeError}=await db.storage.from("business-knowledge").upload(path,bytes,{contentType:file.type,upsert:false});if(storeError)throw storeError;
-  const textFile=["text/plain","text/markdown","text/csv"].includes(file.type), extracted=textFile?new TextDecoder().decode(bytes).slice(0,12000):"";
-  const {error:insertError}=await db.from("knowledge_sources").insert({business_id:businessId,source_type:"file",title:file.name,content:extracted||"File securely uploaded. This format still needs text extraction before the content can be searched.",source_url:path,processing_status:extracted?"ready":"pending",created_by:userData.user.id});
+  let extracted="";
+  if(["text/plain","text/markdown","text/csv"].includes(file.type)) extracted=new TextDecoder().decode(bytes).slice(0,12000);
+  else if(file.type==="application/pdf"){
+    const pdfModule=await import("pdf-parse");
+    const parsed=await pdfModule.default(Buffer.from(bytes));
+    extracted=parsed.text.slice(0,12000);
+  } else if(file.type==="application/vnd.openxmlformats-officedocument.wordprocessingml.document"){
+    const mammoth=await import("mammoth");
+    const parsed=await mammoth.extractRawText({buffer:Buffer.from(bytes)});
+    extracted=parsed.value.slice(0,12000);
+  }
+  const {error:insertError}=await db.from("knowledge_sources").insert({business_id:businessId,source_type:"file",title:file.name,content:extracted||"File uploaded but no readable text was extracted. Please check that the document contains selectable text.",source_url:path,processing_status:extracted?"ready":"pending",created_by:userData.user.id});
   if(insertError){await db.storage.from("business-knowledge").remove([path]);throw insertError;}
   await db.from("usage_events").insert({business_id:businessId,event_type:"file_upload",quantity:1,metadata:{mime:file.type,bytes:file.size}});
   return NextResponse.json({uploaded:true,extracted:Boolean(extracted),message:extracted?"File uploaded and indexed.":"File stored securely; PDF/DOCX extraction is not yet enabled."});
