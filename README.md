@@ -20,7 +20,7 @@ Next.js App Router, React, TypeScript, Supabase Auth/Postgres/Storage, OpenRoute
 Requires Node.js 20.9 or newer.
 
 ```bash
-npm ci
+npm install
 cp .env.example .env.local
 npm run dev
 ```
