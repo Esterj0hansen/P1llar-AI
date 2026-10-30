@@ -18,6 +18,8 @@ function KnowledgeContent() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -80,6 +82,25 @@ function KnowledgeContent() {
     finally { setImporting(false); setImportProgress(""); }
   }
 
+  async function uploadKnowledgeFile(event: FormEvent) {
+    event.preventDefault(); setError(""); setNotice("");
+    if (!uploadFile) { setError("Choose a file first."); return; }
+    setUploading(true);
+    try {
+      const db = getSupabaseBrowserClient();
+      const { data, error: authError } = await db.auth.getSession();
+      if (authError) throw authError;
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Please sign in again.");
+      const body = new FormData(); body.append("file", uploadFile); body.append("businessId", businessId);
+      const response = await fetch("/api/knowledge/upload", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Upload failed.");
+      setNotice(result.message || "File uploaded."); setUploadFile(null); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not upload this file."); }
+    finally { setUploading(false); }
+  }
+
   async function addSource(event: FormEvent) {
     event.preventDefault(); setError(""); setNotice("");
     if (title.trim().length < 2 || content.trim().length < 5) { setError("Add a title and at least a short answer or business detail."); return; }
@@ -112,6 +133,15 @@ function KnowledgeContent() {
           <p className="dashboard-note">We scan public pages in small batches and check the sitemap when available. There is no fixed total-page ceiling in the crawler; large websites may take time. JavaScript-only pages, private content and files may not be readable.</p>
           <button className="button button-primary" type="submit" disabled={importing || !businessId}>{importing ? <><LoaderCircle size={16} className="auth-spinner"/> Scanning website...</> : <>Import website information <Globe size={16}/></>}</button>
           {importing && <p className="dashboard-note" role="status">{importProgress || "Starting website scan…"}</p>}
+        </form>
+      </section>
+      <section className="workspace-create">
+        <h2><BookOpen size={19}/> Upload business documents</h2>
+        <form className="workspace-form" onSubmit={uploadKnowledgeFile}>
+          <label htmlFor="knowledge-file">PDF, DOCX, TXT, Markdown or CSV (max 10 MB)</label>
+          <input id="knowledge-file" type="file" accept=".pdf,.docx,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={e=>setUploadFile(e.target.files?.[0] || null)} />
+          <p className="dashboard-note">TXT, Markdown and CSV files are indexed automatically. PDF and DOCX files can be securely stored, but text extraction still needs to be enabled.</p>
+          <button className="button button-primary" type="submit" disabled={uploading || !uploadFile}>{uploading ? "Uploading..." : "Upload document"}</button>
         </form>
       </section>
       <section className="workspace-create">
