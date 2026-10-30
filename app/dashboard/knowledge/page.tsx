@@ -140,7 +140,7 @@ function KnowledgeContent() {
         <form className="workspace-form" onSubmit={uploadKnowledgeFile}>
           <label htmlFor="knowledge-file">PDF, DOCX, TXT, Markdown or CSV (max 10 MB)</label>
           <input id="knowledge-file" type="file" accept=".pdf,.docx,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={e=>setUploadFile(e.target.files?.[0] || null)} />
-          <p className="dashboard-note">TXT, Markdown and CSV files are indexed automatically. PDF and DOCX files can be securely stored, but text extraction still needs to be enabled.</p>
+          <p className="dashboard-note">TXT, Markdown, CSV, PDF and DOCX files are uploaded to private storage and their extracted text is added to your searchable knowledge base. Scanned image-only PDFs may not contain extractable text.</p>
           <button className="button button-primary" type="submit" disabled={uploading || !uploadFile}>{uploading ? "Uploading..." : "Upload document"}</button>
         </form>
       </section>
