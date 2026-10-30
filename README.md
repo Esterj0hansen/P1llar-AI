@@ -1,38 +1,48 @@
 # P1llar AI
 
-P1llar AI is an AI-powered customer support platform designed to help businesses answer customer questions using their own business information.
+P1llar AI helps businesses create a hosted AI customer-support assistant grounded in their own business information.
 
-## Current build
+## Current capabilities
+- Supabase email/password authentication and separate business workspaces.
+- Manual business knowledge entries.
+- Public website import in resumable batches, with sitemap discovery and prioritization for pricing, product, FAQ and policy pages.
+- A hosted customer support page for each business.
+- Server-side AI answers through OpenRouter using the business knowledge base.
+- Optional live reading of public product URLs included by a visitor, with explicit failure handling rather than invented prices.
+- Saved customer conversations and messages.
 
-This repository currently contains:
-- A responsive marketing landing page.
-- An interactive, illustrative chat preview.
-- Product positioning, feature explanations, early-access section, and FAQ.
-- A Next.js App Router project structure.
-
-**Important:** The chat preview is currently illustrative. It does not call an AI model, store customer data, or use a real business knowledge base yet. Do not present it as a live AI support service until the backend is implemented and tested.
-
-## Planned product
-
-1. Secure authentication and separate business workspaces.
-2. Business profile and knowledge-source management.
-3. Import of FAQs, website content, and business documents.
-4. Retrieval-grounded answers with an honest fallback when information is missing.
-5. A shareable support page for each business.
-6. Usage tracking, plan limits, and subscription billing.
-7. Security, privacy, and deployment checks.
+## Stack
+- Next.js App Router, React and TypeScript.
+- Supabase Auth and Postgres with row-level security.
+- OpenRouter for model inference.
+- Vercel deployment.
 
 ## Run locally
-
 Requires Node.js 20.9 or newer.
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
 Open http://localhost:3000.
 
-## Configuration and security
+## Environment
+Set these values in `.env.local` and in the production deployment:
 
-No API keys are required for the landing page. Never commit secrets to Git. Backend credentials should be added through local environment variables and the deployment provider's secret settings when integrations are implemented.
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (or use the publishable key below) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Optional newer Supabase publishable key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only database access; never expose to the browser |
+| `OPENROUTER_API_KEY` | Server-only AI provider key |
+| `NEXT_PUBLIC_SITE_URL` | Optional canonical site URL |
+
+Apply the SQL in `supabase/schema.sql` to the intended Supabase project and review the RLS policies before production use. If the project has already been configured, do not re-run schema changes blindly.
+
+## Important limitations before public launch
+Website import reads same-origin public HTML pages; JavaScript-rendered sites, external catalogue platforms and some protected pages may not be readable. The crawler is bounded and does not guarantee complete catalogue coverage. File uploads, rate limiting, usage metering, paid subscriptions, human handoff, an embeddable widget and automated end-to-end tests remain future work.
+
+See [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) for the current launch checklist.
