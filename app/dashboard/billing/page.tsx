@@ -1,0 +1,15 @@
+"use client";
+import "../../auth.css";
+import Link from "next/link";
+import {useSearchParams} from "next/navigation";
+import {Suspense,useEffect,useState} from "react";
+import {ArrowLeft,CreditCard,LoaderCircle} from "lucide-react";
+import {getSupabaseBrowserClient} from "@/lib/supabase";
+function BillingContent(){
+ const params=useSearchParams(),businessId=params.get("business")||"";
+ const [token,setToken]=useState(""),[plan,setPlan]=useState("starter"),[status,setStatus]=useState("inactive"),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState("");
+ useEffect(()=>{(async()=>{try{const db=getSupabaseBrowserClient();const {data,error}=await db.auth.getSession();if(error)throw error;if(!data.session)throw new Error("Sign in again to manage billing.");setToken(data.session.access_token);const {data:sub}=await db.from("business_subscriptions").select("plan,status").eq("business_id",businessId).maybeSingle();if(sub){setPlan(sub.plan);setStatus(sub.status);}}catch(e){setError(e instanceof Error?e.message:"Could not load billing.");}finally{setLoading(false);}})();},[businessId]);
+ async function checkout(){setBusy(true);setError("");try{const r=await fetch("/api/billing/checkout",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({businessId,plan})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Checkout failed.");window.location.assign(d.authorizationUrl);}catch(e){setError(e instanceof Error?e.message:"Could not start checkout.");setBusy(false);}}
+ return <main className="dashboard-page"><header className="dashboard-header"><Link href="/dashboard" className="auth-brand"><span className="brand-mark"><CreditCard size={20}/></span><span>P1llar<span className="brand-ai"> AI</span></span></Link><Link href="/dashboard" className="dashboard-signout"><ArrowLeft size={15}/> Dashboard</Link></header><section className="dashboard-content"><div className="dashboard-eyebrow">SUBSCRIPTION</div><h1>Plans & billing</h1><p className="dashboard-lead">Choose a plan for this business workspace. Prices and recurring plans are configured in your Paystack account.</p>{loading?<p>Loading billing…</p>:<><p>Current status: <strong>{status}</strong></p><section className="workspace-create"><label htmlFor="plan">Subscription plan</label><select id="plan" value={plan} onChange={e=>setPlan(e.target.value)} style={{display:"block",width:"100%",padding:12,margin:"10px 0 16px",border:"1px solid #dbe2ed",borderRadius:10}}><option value="starter">Starter</option><option value="growth">Growth</option><option value="business">Business</option></select><button type="button" className="button button-primary" disabled={busy||!businessId} onClick={()=>void checkout()}>{busy?<><LoaderCircle size={16}/> Redirecting…</>:"Continue to secure Paystack checkout"}</button></section></>}{error&&<p className="auth-error" role="alert">{error}</p>}</section></main>;
+}
+export default function BillingPage(){return <Suspense fallback={<main className="dashboard-page"><p>Loading billing…</p></main>}><BillingContent/></Suspense>}
