@@ -36,6 +36,7 @@ Create the recurring plans in Paystack and use the exact plan codes in Vercel. C
 - Apply the Supabase launch migration and verify storage bucket/RPC permissions.
 - Complete live end-to-end tests with a real Supabase account, actual uploaded file, rate-limit threshold, handoff/staff reply, and Paystack test transaction + webhook.
 - Test PDF/DOCX extraction with representative documents; scanned PDFs may need OCR.
+- Add plan-based quotas and enforce subscription entitlements in the support and import APIs; billing currently records subscription status and usage but does not block over-limit usage.
 - Add CAPTCHA/bot controls, operational monitoring and a documented retention/deletion workflow.
 - Test widget on third-party domains and validate browser/CORS behaviour.
 
