@@ -4,17 +4,37 @@ import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Command, Send } from "lucide-react";
 
-type Message = { role: "user" | "assistant"; content: string };
+type Message = { id?: string; role: "user" | "assistant"; content: string };
 export default function PublicSupportPage() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug;
   const [business, setBusiness] = useState<{ name: string; greeting: string; brandColor: string } | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState("");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { let active = true; fetch("/api/support?slug=" + encodeURIComponent(slug)).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || "Support page unavailable."); return d; }).then(d => { if (active) { setBusiness(d.business); setMessages([{ role: "assistant", content: d.business.greeting || "Hi! How can we help you today?" }]); } }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [slug]);
-  async function send(e: FormEvent) { e.preventDefault(); const question = input.trim(); if (!question || sending) return; setInput(""); setError(""); setMessages(m => [...m, { role: "user", content: question }]); setSending(true); try { const response = await fetch("/api/support", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, question }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not get an answer."); setMessages(m => [...m, { role: "assistant", content: data.answer }]); } catch (err) { setError(err instanceof Error ? err.message : "Could not send message."); } finally { setSending(false); } }
+  useEffect(() => {
+    if (!conversationId) return;
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/support?slug=" + encodeURIComponent(slug) + "&conversationId=" + encodeURIComponent(conversationId));
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.messages)) return;
+        setMessages(current => {
+          const known = new Set(current.map(message => message.id).filter(Boolean));
+          const additions = data.messages.filter((message: {id:string}) => !known.has(message.id)).map((message: {id:string;content:string}) => ({id:message.id,role:"assistant" as const,content:message.content}));
+          return additions.length ? [...current, ...additions] : current;
+        });
+      } catch { /* Keep the current chat visible if polling temporarily fails. */ }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 4000);
+    return () => window.clearInterval(timer);
+  }, [slug, conversationId]);
+
+  async function send(e: FormEvent) { e.preventDefault(); const question = input.trim(); if (!question || sending) return; setInput(""); setError(""); setMessages(m => [...m, { role: "user", content: question }]); setSending(true); try { const response = await fetch("/api/support", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug, question, ...(conversationId ? { conversationId } : {}) }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Could not get an answer."); setMessages(m => [...m, { role: "assistant", content: data.answer }]); if (data.conversationId) setConversationId(data.conversationId); } catch (err) { setError(err instanceof Error ? err.message : "Could not send message."); } finally { setSending(false); } }
   return <main style={{ minHeight: "100vh", background: "#f4f6fb", padding: "24px 14px", color: "#172033" }}><section style={{ maxWidth: 680, margin: "0 auto", background: "#fff", border: "1px solid #e5eaf3", borderRadius: 20, overflow: "hidden", boxShadow: "0 18px 60px #14213d12" }}><header style={{ padding: 22, background: business?.brandColor || "#356df3", color: "#fff", display: "flex", gap: 12, alignItems: "center" }}><Command size={24}/><div><h1 style={{ margin: 0, fontSize: 21 }}>{loading ? "Loading support…" : business?.name || "Customer support"}</h1><p style={{ margin: "4px 0 0", opacity: .9, fontSize: 13 }}>AI customer support</p></div></header><div style={{ padding: 18, minHeight: 360, display: "flex", flexDirection: "column", gap: 12 }}>{loading && <p>Loading…</p>}{messages.map((m, i) => <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "88%", padding: "12px 14px", borderRadius: 14, background: m.role === "user" ? (business?.brandColor || "#356df3") : "#f0f3f8", color: m.role === "user" ? "white" : "#172033", whiteSpace: "pre-wrap" }}>{m.content}</div>)}{sending && <p style={{ color: "#64748b" }}>Thinking…</p>}{error && <p style={{ color: "#b42318", fontSize: 13 }}>{error}</p>}</div><form onSubmit={send} style={{ padding: 14, borderTop: "1px solid #e5eaf3", display: "flex", gap: 8 }}><textarea aria-label="Your question" value={input} onChange={e => setInput(e.target.value)} onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="Type your question… (Enter for a new line, Ctrl/⌘+Enter to send)" maxLength={2000} required disabled={loading || !business} rows={2} style={{ flex: 1, minWidth: 0, resize: "vertical", border: "1px solid #d9e0ec", borderRadius: 12, padding: "12px 14px", fontSize: 15, fontFamily: "inherit" }}/><button disabled={sending || loading || !business} aria-label="Send question" style={{ border: 0, borderRadius: 12, padding: "0 16px", background: business?.brandColor || "#356df3", color: "#fff" }}><Send size={18}/></button></form><footer style={{ padding: "0 16px 14px", fontSize: 11, color: "#7b879b", textAlign: "center" }}>Powered by P1llar AI</footer></section></main>;
 }
