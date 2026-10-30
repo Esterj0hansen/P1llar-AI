@@ -44,7 +44,7 @@ alter table public.support_conversations add column if not exists handoff_note t
 create table if not exists public.business_subscriptions (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null unique references public.businesses(id) on delete cascade,
-  provider text not null default 'stripe',
+  provider text not null default 'paystack',
   provider_customer_id text,
   provider_subscription_id text unique,
   plan text not null default 'free' check (plan in ('free','starter','growth','business')),
