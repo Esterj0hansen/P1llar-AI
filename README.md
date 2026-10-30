@@ -5,7 +5,7 @@ P1llar AI gives businesses a hosted AI customer-support assistant grounded in th
 ## Implemented
 - Supabase email/password authentication and isolated business workspaces.
 - Manual knowledge entries and resumable public website imports.
-- Private file upload endpoint and dashboard controls. TXT, Markdown and CSV are indexed; PDF and DOCX are stored privately but still require a text-extraction worker before they can be searched.
+- Private file upload endpoint and dashboard controls. TXT, Markdown, CSV, PDF and DOCX text extraction is implemented; scanned image-only PDFs may not yield searchable text.
 - Hosted public support pages and a copy-paste embeddable chat widget.
 - OpenRouter-powered answers with business knowledge retrieval.
 - Conversation inbox with human-handoff flags, staff replies and resolve controls.
@@ -59,7 +59,7 @@ Add this to the business website, replacing the slug with the business support s
 - Create the three recurring plans in Paystack and copy their plan codes to the matching environment variables.
 - Configure the Paystack webhook URL.
 - Apply the Supabase launch migration.
-- Confirm PDF/DOCX extraction is added before describing those formats as searchable.
+- Test PDF/DOCX extraction with text-based and scanned sample files; scanned PDFs may need OCR.
 - Run the GitHub Actions checks and complete a real sign-up, website import, support conversation, file upload, rate-limit and Paystack test transaction.
 - Add CAPTCHA/bot controls, retention controls, monitoring and a PDF/DOCX extraction worker before scaling.
 
