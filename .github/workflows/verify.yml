@@ -14,5 +14,6 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm test
+      - run: node --check public/p1llar-widget.js
       - run: npm run typecheck
       - run: npm run build
