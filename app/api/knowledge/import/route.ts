@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
         else rows.push({ business_id: businessId, title: page.title, content: page.content, source_type: "website", processing_status: "ready" });
       }
       if (rows.length) { const { error: insertError } = await db.from("knowledge_sources").insert(rows); if (insertError) throw insertError; }
+      await db.from("usage_events").insert({ business_id: businessId, event_type: "website_import", quantity: collected.length, metadata: { pages_visited_this_batch: attempted } });
     }
     const remaining = queue.filter(url => !visited.has(url));
     const done = remaining.length === 0;
